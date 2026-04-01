@@ -3,7 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>のり×あよ 家計簿</title>
+  <title>のあ家計簿</title>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#3A5635">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="のあ家計簿">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;700&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
   <style>
@@ -264,6 +270,10 @@
       <button class="record-btn" onclick="toggleRecordForm()"><span style="font-size:18px;line-height:1">＋</span> 記録する</button>
     </div>
     <div class="record-inline" id="record-inline">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--ink)">支出を記録する</div>
+        <button onclick="toggleRecordForm()" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--ink3);padding:0 4px">✕</button>
+      </div>
       <div class="form-row"><label class="form-label">支払った人</label>
         <div class="who-grid">
           <button class="who-btn" id="btn-nori" onclick="selectWho('nori')"><div style="font-size:18px">🧑</div><div class="who-name">のり</div></button>
@@ -325,6 +335,7 @@
           <div class="tate-toggle-text"><div class="tate-toggle-label">相手の分を立替えた</div><div class="tate-toggle-sub" id="sf-tate-sub">オフ = 通常の半々割り勘</div></div>
         </button>
       </div>
+      <div class="form-row"><label class="form-label">開始月（これより前は計上しない）</label><input class="form-input" type="month" id="sf-start-ym"></div>
       <div class="form-row"><label class="form-label">カテゴリ</label><div class="cat-grid" id="sub-cat-grid"></div></div>
       <button class="submit-btn" onclick="addSub()">追加する</button>
     </div>
@@ -456,11 +467,12 @@
     const name=document.getElementById('sf-name').value.trim();
     const amt=parseFloat(document.getElementById('sf-amount').value);
     const day=parseInt(document.getElementById('sf-day').value);
+    const startYM=document.getElementById('sf-start-ym').value||thisYM;
     if(!name||!amt||!day){alert('すべての項目を入力してください');return;}
     const icons={'Netflix':'📺','Spotify':'🎵','家賃':'🏠','Disney+':'🏰','YouTube Premium':'▶️','Apple Music':'🎵','電気':'💡','ガス':'🔥','水道':'💧','Amazon Prime':'📦'};
     setSyncStatus('saving');
-    await addDoc(collection(db,'subs'),{name,amount:amt,day,who:subWho,cat:subCat,icon:icons[name]||'🔄',tate:sfIsTate});
-    document.getElementById('sf-name').value='';document.getElementById('sf-amount').value='';document.getElementById('sf-day').value='';
+    await addDoc(collection(db,'subs'),{name,amount:amt,day,who:subWho,cat:subCat,icon:icons[name]||'🔄',tate:sfIsTate,startYM});
+    document.getElementById('sf-name').value='';document.getElementById('sf-amount').value='';document.getElementById('sf-day').value='';document.getElementById('sf-start-ym').value='';
     sfIsTate=false;document.getElementById('sf-tate-toggle').classList.remove('on');document.getElementById('sf-tate-sub').textContent='オフ = 通常の半々割り勘';
     document.getElementById('sub-form').classList.remove('open');
   }
@@ -504,7 +516,9 @@
   // --- 以下 UI ロジック（Firebaseと分離） ---
   function getSubExpensesForMonth(ym) {
     const [y,m]=ym.split('-').map(Number);
-    return subs.map(s=>{const day=Math.min(s.day,new Date(y,m,0).getDate());return {id:'sub_'+s.id+'_'+ym,amount:s.amount,desc:s.name,cat:s.cat,date:`${ym}-${String(day).padStart(2,'0')}`,who:s.who,tate:!!s.tate,auto:true};});
+    return subs
+      .filter(s=>!s.startYM||ym>=s.startYM)
+      .map(s=>{const day=Math.min(s.day,new Date(y,m,0).getDate());return {id:'sub_'+s.id+'_'+ym,amount:s.amount,desc:s.name,cat:s.cat,date:`${ym}-${String(day).padStart(2,'0')}`,who:s.who,tate:!!s.tate,auto:true};});
   }
   function getExpensesForMonth(ym){return [...expenses.filter(e=>e.date.startsWith(ym)),...getSubExpensesForMonth(ym)].sort((a,b)=>b.date.localeCompare(a.date));}
   function calcBalance(ym){
