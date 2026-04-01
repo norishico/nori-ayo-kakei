@@ -120,7 +120,7 @@
     .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100;align-items:center;justify-content:center;padding:16px}
     .modal-overlay.open{display:flex}
     .modal{background:var(--surface);border-radius:16px;padding:20px;width:100%;max-width:400px;max-height:85vh;overflow-y:auto}
-    .modal-title{font-family:'Syne',sans-serif;font-size:16px;font-weight:700;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center}
+    .modal-title{font-family:'Syne',sans-serif;font-size:16px;font-weight:700;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:-20px;background:var(--surface);padding:4px 0;z-index:1}
     .modal-close{background:none;border:none;font-size:18px;cursor:pointer;color:var(--ink3);padding:0 4px}
     .modal-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
     .btn-save{padding:10px;background:var(--accent);color:#fff;border:none;border-radius:9px;font-family:'Syne',sans-serif;font-size:13px;font-weight:700;cursor:pointer}
@@ -224,6 +224,7 @@
       <div><label class="form-label">金額（円）</label><input class="form-input" type="number" id="se-amount" min="0"></div>
       <div><label class="form-label">引き落とし日</label><input class="form-input" type="number" id="se-day" min="1" max="31"><div class="sub-day-note">毎月この日に計上</div></div>
     </div>
+    <div class="form-row"><label class="form-label">開始月（これより前は計上しない）</label><input class="form-input" type="month" id="se-start-ym"></div>
     <div class="form-row"><label class="form-label">支払った人</label>
       <div class="who-grid">
         <button class="who-btn" id="se-btn-nori" onclick="seSelectWho('nori')"><div style="font-size:18px">🧑</div><div class="who-name">のり</div></button>
@@ -487,11 +488,12 @@
     const name=document.getElementById('se-name').value.trim();
     const amt=parseFloat(document.getElementById('se-amount').value);
     const day=parseInt(document.getElementById('se-day').value);
+    const startYM=document.getElementById('se-start-ym').value||'';
     if(!name||!amt||!day){alert('すべての項目を入力してください');return;}
     const icons={'Netflix':'📺','Spotify':'🎵','家賃':'🏠','Disney+':'🏰','YouTube Premium':'▶️','Apple Music':'🎵','電気':'💡','ガス':'🔥','水道':'💧','Amazon Prime':'📦'};
     const s=subs.find(x=>x.id===editingSubId);
     setSyncStatus('saving');
-    await updateDoc(doc(db,'subs',editingSubId),{name,amount:amt,day,who:seWho,cat:seCat,icon:icons[name]||s?.icon||'🔄',tate:seIsTate});
+    await updateDoc(doc(db,'subs',editingSubId),{name,amount:amt,day,who:seWho,cat:seCat,icon:icons[name]||s?.icon||'🔄',tate:seIsTate,startYM});
     closeModal('sub-edit-modal');
   }
 
@@ -575,7 +577,7 @@
   window.openSubEdit=function(id){
     const s=subs.find(x=>x.id===id);if(!s)return;
     editingSubId=id;seWho=s.who;seCat=s.cat;seIsTate=!!s.tate;
-    document.getElementById('se-name').value=s.name;document.getElementById('se-amount').value=s.amount;document.getElementById('se-day').value=s.day;
+    document.getElementById('se-name').value=s.name;document.getElementById('se-amount').value=s.amount;document.getElementById('se-day').value=s.day;document.getElementById('se-start-ym').value=s.startYM||'';
     window.seSelectWho(s.who);window.buildSeCatGrid();
     document.getElementById('se-tate-toggle').classList.toggle('on',seIsTate);document.getElementById('se-tate-sub').textContent=seIsTate?'オン = 相手が全額返す':'オフ = 通常の半々割り勘';
     document.getElementById('sub-edit-modal').classList.add('open');
@@ -593,7 +595,12 @@
     }).join('');
     const total=subs.reduce((s,x)=>s+x.amount,0);
     const ss=document.getElementById('sub-summary');if(!ss)return;
-    ss.innerHTML=`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border)"><span style="color:var(--ink2)">月額合計</span><span style="font-family:'Syne',sans-serif;font-weight:700">${fmt(total)}</span></div><div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink2)">ひとり当たり</span><span style="font-family:'Syne',sans-serif;font-weight:700;color:var(--accent)">${fmt(total/2)}</span></div>`;
+    const warikanTotal=subs.filter(s=>!s.tate).reduce((s,x)=>s+x.amount,0);
+    const tateTotal=subs.filter(s=>s.tate).reduce((s,x)=>s+x.amount,0);
+    let summaryHTML=`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border)"><span style="color:var(--ink2)">月額合計</span><span style="font-family:'Syne',sans-serif;font-weight:700">${fmt(total)}</span></div>`;
+    if(warikanTotal>0) summaryHTML+=`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:${tateTotal>0?'1px solid var(--border)':'none'}"><span style="color:var(--ink2)">ひとり当たり（割り勘分）</span><span style="font-family:'Syne',sans-serif;font-weight:700;color:var(--accent)">${fmt(warikanTotal/2)}</span></div>`;
+    if(tateTotal>0) summaryHTML+=`<div style="display:flex;justify-content:space-between;padding:5px 0"><span style="color:var(--ink2)">立替合計（全額返済）</span><span style="font-family:'Syne',sans-serif;font-weight:700;color:var(--tate)">${fmt(tateTotal)}</span></div>`;
+    ss.innerHTML=summaryHTML;
   }
 
   function renderSeisan(){
